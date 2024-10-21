@@ -21,8 +21,7 @@ sys.path.append(hello_pytorch_DIR)
 
 from model.lenet import LeNet
 from tools.my_dataset import RMBDataset
-from tools.common_tools import set_seed
-
+from tools.common_tools import set_seed, transform_invert
 
 set_seed()  # 设置随机种子
 rmb_label = {"1": 0, "100": 1}
@@ -48,6 +47,7 @@ norm_std = [0.229, 0.224, 0.225]
 train_transform = transforms.Compose([
     transforms.Resize((32, 32)),
     transforms.RandomCrop(32, padding=4),
+    transforms.RandomGrayscale(1),
     transforms.ToTensor(),
     transforms.Normalize(norm_mean, norm_std),
 ])
@@ -181,9 +181,17 @@ my_dir = os.path.join(cwd, 'transform_img_RMB', "src")
 my_data = RMBDataset(my_dir, transform=train_transform)
 my_loader = DataLoader(dataset=my_data, batch_size=1)
 for i, data in enumerate(my_loader):
+    # forward
     inputs, labels = data
     outputs = net(inputs)
     _, predicted = torch.max(outputs.data, 1)
 
-    rmb_label_ = 1 if labels.numpy()[0] == 0 else 100
-    print(f"模型预测我的纸币为{rmb}元，实际为{rmb_label_}元")
+    rmb = 1 if predicted.numpy()[0] == 0 else 100
+
+    img_tensor = inputs[0, ...]  # C H W
+    img = transform_invert(img_tensor, valid_transform)
+    plt.imshow(img)
+    plt.title(f"Model gets {rmb} Yuan")
+    plt.show()
+    plt.pause(0.5)
+    plt.close()
