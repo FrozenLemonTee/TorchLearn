@@ -13,7 +13,7 @@ def is_a_ratio(ratio):
     return (isinstance(ratio, int) or isinstance(ratio, float)) and 0 <= ratio <= 1
 
 
-def split_data(src_dir, tar_dir, train_percent, valid_percent, test_percent, _seed = 0):
+def split_data(src_dir, tar_dir, train_percent, valid_percent, test_percent, _seed=0):
     if not os.path.exists(src_dir):
         raise NotADirectoryError(f'{src_dir} is not a directory')
     if not is_a_ratio(train_percent) or not is_a_ratio(valid_percent) or \

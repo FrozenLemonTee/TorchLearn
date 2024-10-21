@@ -1,4 +1,6 @@
-import torch, torchvision, torchaudio
+import torch
+import torchaudio
+import torchvision
 
 if __name__ == '__main__':
     print("Hello torch!")

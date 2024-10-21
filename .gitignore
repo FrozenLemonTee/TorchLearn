@@ -1,2 +1,3 @@
-homework4/DogCat_data_split
-.idea
+**/DogCat_data_split/
+.idea/
+**/__pycache__/

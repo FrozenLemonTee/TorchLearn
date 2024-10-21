@@ -5,32 +5,36 @@ from matplotlib import pyplot as plt
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
-from torchvision import transforms, models
+from torchvision import transforms
+from torchvision.models import resnet50
 
 from homework4.BinaryClassificationDataset import BinaryClassificationDataset
 from homework4.dataSplit import split_data
 
-
 if __name__ == '__main__':
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cwd = os.getcwd()
     print("current working directory: ", cwd)
     src_dir = os.path.join(cwd, 'DogCat_data', 'train')
     print("data src directory: ", src_dir)
-    split_data(src_dir, os.path.join(cwd, 'DogCat_data_split'),
-               0.6, 0.2, 0.2)
+    tar_dir = os.path.join(cwd, 'DogCat_data_split')
+    if not os.path.exists(tar_dir):
+        split_data(src_dir, tar_dir,
+                   0.6, 0.2, 0.2)
     dogCat_labels = ['dog', 'cat']
     norm_mean = [0.485, 0.456, 0.406]
     norm_std = [0.229, 0.224, 0.225]
 
     train_transform = transforms.Compose([
-        transforms.Resize((32, 32)),
-        transforms.RandomCrop(32, padding=4),
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
         transforms.ToTensor(),
         transforms.Normalize(norm_mean, norm_std),
     ])
 
     valid_transform = transforms.Compose([
-        transforms.Resize((32, 32)),
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(norm_mean, norm_std),
     ])
@@ -42,22 +46,28 @@ if __name__ == '__main__':
     dogCat_valid = BinaryClassificationDataset(os.path.join(
         cwd, 'DogCat_data_split', 'valid'), dogCat_labels, valid_transform)
 
-    dogCat_train_loader = DataLoader(dogCat_train, batch_size=10, shuffle=True)
-    dogCat_test_loader = DataLoader(dogCat_test, batch_size=10, shuffle=True)
-    dogCat_valid_loader = DataLoader(dogCat_valid, batch_size=10, shuffle=True)
+    batch_size = 10
 
-    my_model = models.resnet50(pretrained=True)
+    dogCat_train_loader = DataLoader(dogCat_train, batch_size=batch_size, shuffle=True)
+    dogCat_test_loader = DataLoader(dogCat_test, batch_size=batch_size, shuffle=True)
+    dogCat_valid_loader = DataLoader(dogCat_valid, batch_size=batch_size, shuffle=True)
+
+    my_model = resnet50(pretrained=True)
+    num_features = my_model.fc.in_features
+    my_model.fc = nn.Linear(num_features, 2)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(my_model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.Adam(my_model.parameters(), lr=0.001)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
     train_curve = list()
     valid_curve = list()
 
-    MAX_EPOCH = 50
+    MAX_EPOCH = 20
     log_interval = 10
     val_interval = 1
+
+    my_model.to(device)
 
     for epoch in range(MAX_EPOCH):
 
@@ -70,6 +80,7 @@ if __name__ == '__main__':
 
             # forward
             inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
             outputs = my_model(inputs)
 
             # backward
@@ -83,7 +94,7 @@ if __name__ == '__main__':
             # 统计分类情况
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
-            correct += (predicted == labels).squeeze().sum().numpy()
+            correct += (predicted == labels).squeeze().sum()
 
             # 打印训练信息
             loss_mean += loss.item()
@@ -106,12 +117,13 @@ if __name__ == '__main__':
             with torch.no_grad():
                 for j, data in enumerate(dogCat_valid_loader):
                     inputs, labels = data
+                    inputs, labels = inputs.to(device), labels.to(device)
                     outputs = my_model(inputs)
                     loss = criterion(outputs, labels)
 
                     _, predicted = torch.max(outputs.data, 1)
                     total_val += labels.size(0)
-                    correct_val += (predicted == labels).squeeze().sum().numpy()
+                    correct_val += (predicted == labels).squeeze().sum()
 
                     loss_val += loss.item()
 
@@ -124,7 +136,8 @@ if __name__ == '__main__':
 
     train_iters = len(dogCat_train_loader)
     valid_x = torch.arange(1,
-                        len(valid_curve) + 1) * train_iters * val_interval - 1  # 由于valid中记录的是epochloss，需要对记录点进行转换到iterations
+                           len(valid_curve) + 1) * train_iters * val_interval - 1  # 由于valid中记录的是epochloss
+    # ，需要对记录点进行转换到iterations
     valid_y = valid_curve
 
     plt.plot(train_x, train_y, label='Train')
@@ -134,3 +147,17 @@ if __name__ == '__main__':
     plt.ylabel('loss value')
     plt.xlabel('Iteration')
     plt.show()
+
+    my_model.eval()
+    total_ = 0
+    correct_ = 0
+    for i, data in enumerate(dogCat_test_loader):
+        # forward
+        inputs, labels = data
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = my_model(inputs)
+        _, predicted = torch.max(outputs.data, 1)
+        total_ += labels.size(0)
+        correct_ += (predicted == labels).squeeze().sum()
+        print(f"模型预测为{dogCat_labels[predicted[0]]}，实际为{dogCat_labels[labels]}")
+    print(f"Acc:{correct_ / total_}.2%")
